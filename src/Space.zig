@@ -10,7 +10,7 @@ sleep_speed_threshold: t.Float,
 
 const SpaceInitOptions = struct {
     iterations: u8 = 10,
-    gravity: t.Vect3 = .{0},
+    gravity: t.Vect3 = .{ 0, 0, 0 },
     damping: t.Float = 1.0,
     idle_speed_threshold: t.Float = 0,
     sleep_speed_threshold: t.Float = std.math.inf(t.Float),
