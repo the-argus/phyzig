@@ -5,10 +5,11 @@ pub fn initalizeSpace(ally: std.mem.Allocator) !void {
 }
 
 test {
-    std.testing.refAllDeclsRecursive(@import("data_structures/Grid.zig"));
-    std.testing.refAllDeclsRecursive(@import("data_structures/FreeList.zig"));
-    std.testing.refAllDeclsRecursive(@import("data_structures/OctTree.zig"));
-    std.testing.refAllDeclsRecursive(@import("Space.zig"));
+    _ = @import("data_structures/Grid.zig");
+    _ = @import("data_structures/FreeList.zig").FreeList(u8, 4);
+    _ = @import("data_structures/FreeList.zig");
+    _ = @import("data_structures/OctTree.zig");
+    _ = @import("Space.zig");
 
     std.testing.expect(block: {
         initalizeSpace(std.testing.allocator) catch break :block false;
