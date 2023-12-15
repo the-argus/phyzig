@@ -18,11 +18,24 @@ pub const Depth = u8;
 pub const Degree = 8;
 
 pub const Node = struct {
-    first_child: ?Index,
+    first_child: ?Index = null,
     // TODO: make OctTree a function accepting some options, one of
     // those being to use an implementation that doesn't keep track
     // of count (the number of children it has, if its a leaf node).
-    count: ?Count,
+    count: ?Count = null,
+
+    pub fn isLeaf(self: @This()) bool {
+        return self.count != null;
+    }
+
+    pub fn isEmpty(self: @This()) bool {
+        return self.first_child == null and self.count == 0;
+    }
+
+    pub fn makeEmpty(self: *@This()) void {
+        self.first_child = null;
+        self.count = 0;
+    }
 };
 
 /// A bounding box defined by a center point and a width, height, and depth
@@ -57,29 +70,51 @@ pub const NodeDataList = std.ArrayList(NodeData);
 // struct fields
 ally: std.mem.Allocator,
 nodes: NodeList,
+free_index_stack: std.ArrayList(Index),
+free_node: ?Index,
 
-pub fn init(ally: std.mem.Allocator) @This() {
+pub fn init(ally: std.mem.Allocator) !@This() {
+    var nodes = NodeList.init(ally);
+    // initialize with one root node
+    // TODO: probably reserve initial memory
+    try nodes.append(.{});
     return .{
         .ally = ally,
-        .nodes = NodeList.init(ally),
+        .nodes = nodes,
+        .free_index_stack = std.ArrayList(Index).init(ally),
+        .free_node = null,
     };
+}
+
+pub fn deinit(self: *@This()) void {
+    self.nodes.deinit();
+    self.free_index_stack.deinit();
+}
+
+pub fn root(self: *@This()) *Node {
+    std.debug.assert(self.nodes.items.len >= 1);
+    return &self.nodes.items[0];
 }
 
 /// Traverses the nodes in the tree and finds all leaves within a given bounds.
 /// Returns them as an owned list of NodeData, to be freed with user_allocator
-pub fn findLeaves(self: @This(), user_allocator: std.mem.Allocator, root: NodeData, bounds: OctTreeBounds) !NodeDataList {
+pub fn findLeaves(
+    self: @This(),
+    user_allocator: std.mem.Allocator,
+    root_of_search: NodeData,
+    bounds: OctTreeBounds,
+) !NodeDataList {
     bounds.assertValid();
     var leaves = NodeDataList.init(user_allocator);
     var nodes_to_process = NodeDataList.init(self.ally);
     defer nodes_to_process.deinit();
     errdefer leaves.deinit();
 
-    try nodes_to_process.append(root);
+    try nodes_to_process.append(root_of_search);
 
     while (nodes_to_process.items.len > 0) {
-        const top_node = nodes_to_process.getLast();
-        if (self.nodes.items[top_node.index].count) {
-            // only leaves have counts
+        const top_node = nodes_to_process.pop();
+        if (self.nodes.items[top_node.index].isLeaf()) {
             try leaves.append(top_node);
         } else {
             const mx = top_node.center_bounding.pos[0];
@@ -197,4 +232,49 @@ pub fn findLeaves(self: @This(), user_allocator: std.mem.Allocator, root: NodeDa
         }
     }
     return user_allocator;
+}
+
+/// Remove unused nodes from the tree
+pub fn cleanup(self: *@This()) !void {
+    var nodes_to_process = std.ArrayList(Index).init(self.ally);
+    defer nodes_to_process.deinit();
+
+    if (!root().isLeaf()) {
+        try nodes_to_process.append(0);
+    }
+
+    while (nodes_to_process.items.len > 0) {
+        const node_index = nodes_to_process.pop();
+        var node = &self.nodes[node_index];
+        std.debug.assert(node.first_child != null);
+
+        const num_empty_leaves: Count = 0;
+
+        for (0..Degree) |index| {
+            const child_index = node.?.first_child + index;
+            const child = &self.nodes[child_index];
+
+            if (child.isEmpty()) |count| {
+                if (count == 0) num_empty_leaves += 1;
+            } else {
+                try nodes_to_process.append(child_index);
+            }
+        }
+
+        // if all children were empty leaves, remove em, this node is now the
+        // empty leaf
+        if (num_empty_leaves == Degree) {
+            self.nodes[node.?.first_child].first_child = self.free_node orelse null;
+            self.free_node = node.first_child;
+
+            node.makeEmpty();
+        }
+    }
+}
+
+test "makeEmpty and isEmpty match" {
+    var node: Node = .{};
+    node.makeEmpty();
+    std.testing.expect(node.isEmpty());
+    std.testing.expect(!node.isLeaf());
 }
