@@ -12,7 +12,9 @@ with.
 - Multithreading
 - Generic over allocation (ie. the API allows you to pass in an allocator)
 - Compile-time-known collision handlers for platforms where code size is not
-  a concern. And probably requiring that you use Zig.
+  a concern. And probably requiring that you use Zig. And also it only really
+  makes sense if you have a large pool of things all with the same collision
+  handler and want them to be grouped together. So maybe just function pointers?
 - Maybe one day support for GPU acceleration via Vulkan compute shaders?
 
 ## Goals
