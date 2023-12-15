@@ -51,7 +51,10 @@ pub const OctTreeBounds = struct {
     bottom: t.Vect3,
 
     pub fn assertValid(self: @This()) void {
-        std.debug.assert(self.top > self.bottom);
+        const status = self.top > self.bottom;
+        std.debug.assert(status[0]);
+        std.debug.assert(status[1]);
+        std.debug.assert(status[2]);
     }
 };
 
@@ -124,7 +127,7 @@ pub fn findLeaves(
             const half_y = top_node.center_bounding.size[1] / 2;
             const half_z = top_node.center_bounding.size[2] / 2;
 
-            const first_child = self.nodes.items[top_node.index].first_child;
+            const first_child = self.nodes.items[top_node.index].first_child.?;
             const left = mx - half_x;
             const top = my - half_y;
             const front = mz - half_z;
@@ -138,7 +141,7 @@ pub fn findLeaves(
                         // most negative quadrant
                         try nodes_to_process.append(.{
                             .index = first_child + 0,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ left, top, front },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -149,7 +152,7 @@ pub fn findLeaves(
                         // most negative except for on X
                         try nodes_to_process.append(.{
                             .index = first_child + 1,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ right, top, front },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -162,7 +165,7 @@ pub fn findLeaves(
                         // most negative on z and x, but y is more positive
                         try nodes_to_process.append(.{
                             .index = first_child + 2,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ left, bottom, front },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -173,7 +176,7 @@ pub fn findLeaves(
                         // most negative only on z
                         try nodes_to_process.append(.{
                             .index = first_child + 3,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ right, bottom, front },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -188,7 +191,7 @@ pub fn findLeaves(
                     if (bounds.bottom[0] <= mx) {
                         try nodes_to_process.append(.{
                             .index = first_child + 0,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ left, top, back },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -198,7 +201,7 @@ pub fn findLeaves(
                     if (bounds.top[0] > mx) {
                         try nodes_to_process.append(.{
                             .index = first_child + 1,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ right, top, back },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -210,7 +213,7 @@ pub fn findLeaves(
                     if (bounds.bottom[0] <= mx) {
                         try nodes_to_process.append(.{
                             .index = first_child + 2,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ left, bottom, back },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -220,7 +223,7 @@ pub fn findLeaves(
                     if (bounds.top[0] > mx) {
                         try nodes_to_process.append(.{
                             .index = first_child + 3,
-                            .depth = top.depth + 1,
+                            .depth = top_node.depth + 1,
                             .center_bounding = CenterBounding{
                                 .pos = t.Vect3{ right, bottom, back },
                                 .size = t.Vect3{ half_x, half_y, half_z },
@@ -231,7 +234,7 @@ pub fn findLeaves(
             }
         }
     }
-    return user_allocator;
+    return leaves;
 }
 
 /// Remove unused nodes from the tree
@@ -239,32 +242,32 @@ pub fn cleanup(self: *@This()) !void {
     var nodes_to_process = std.ArrayList(Index).init(self.ally);
     defer nodes_to_process.deinit();
 
-    if (!root().isLeaf()) {
+    if (!self.root().isLeaf()) {
         try nodes_to_process.append(0);
     }
 
     while (nodes_to_process.items.len > 0) {
         const node_index = nodes_to_process.pop();
-        var node = &self.nodes[node_index];
+        var node = &self.nodes.items[node_index];
         std.debug.assert(node.first_child != null);
 
-        const num_empty_leaves: Count = 0;
+        var num_empty_leaves: Count = 0;
 
         for (0..Degree) |index| {
-            const child_index = node.?.first_child + index;
-            const child = &self.nodes[child_index];
+            const child_index = node.first_child.? + index;
+            const child = &self.nodes.items[child_index];
 
-            if (child.isEmpty()) |count| {
+            if (child.count) |count| {
                 if (count == 0) num_empty_leaves += 1;
             } else {
-                try nodes_to_process.append(child_index);
+                try nodes_to_process.append(@intCast(child_index));
             }
         }
 
         // if all children were empty leaves, remove em, this node is now the
         // empty leaf
         if (num_empty_leaves == Degree) {
-            self.nodes[node.?.first_child].first_child = self.free_node orelse null;
+            self.nodes.items[node.first_child.?].first_child = self.free_node orelse null;
             self.free_node = node.first_child;
 
             node.makeEmpty();
