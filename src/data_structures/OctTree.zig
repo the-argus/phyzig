@@ -271,3 +271,10 @@ pub fn cleanup(self: *@This()) !void {
         }
     }
 }
+
+test "makeEmpty and isEmpty match" {
+    var node: Node = .{};
+    node.makeEmpty();
+    std.testing.expect(node.isEmpty()) catch @panic("makeEmpty does not match with isEmpty.");
+    std.testing.expect(!node.isLeaf()) catch @panic("Empty node is considered a leaf, but it shouldn't be");
+}

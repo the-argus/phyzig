@@ -1,22 +1,26 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-///
-///Much of this is stolen from
-///https://github.com/mitchellh/libxev/blob/main/build.zig
-///
+const test_srcs = &[_][]const u8{
+    "src/top_level_tests.zig",
+    "src/data_structures/OctTree.zig",
+    "src/data_structures/FreeList.zig",
+};
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const top_level_tests = b.addTest(.{
-        .optimize = optimize,
-        .target = target,
-        .root_source_file = .{ .path = "src/top_level_tests.zig" },
-    });
+    const tests_step = b.step("test", "Run all phyzig tests.");
 
-    const tests_step = b.step("test", "Run the top-level phyzig tests.");
-    tests_step.dependOn(&top_level_tests.step);
+    for (test_srcs) |test_src_file| {
+        const teststep = b.addTest(.{
+            .optimize = optimize,
+            .target = target,
+            .root_source_file = .{ .path = test_src_file },
+        });
+        tests_step.dependOn(&teststep.step);
+    }
 
     _ = b.addModule("phyzig", .{
         .source_file = .{ .path = "src/phyzig.zig" },
